@@ -10,10 +10,15 @@ CI replays against a real Splunk. Build with ``kerbdetect build-app --out
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
-from kerbdetect.model import Detection, Model, check_rules
+from kerbdetect.model import Detection, Model, ModelError, check_rules
 from kerbdetect.splunk import DEFAULT_INDEX
+
+# A Splunk index name interpolated into generated SPL and dashboard XML. Reject
+# anything that could inject an extra search term or corrupt the XML.
+_INDEX_NAME = re.compile(r"^[A-Za-z0-9_-]+$")
 
 _APP_CONF = """\
 [install]
@@ -44,7 +49,7 @@ _DASHBOARD = """\
       <title>Kerberos service-ticket encryption types (last 24h)</title>
       <chart>
         <search>
-          <query>| tstats count where index={index} EventCode=4769 by TicketEncryptionType</query>
+          <query>index={index} EventCode=4769 | stats count by TicketEncryptionType</query>
           <earliest>-24h</earliest>
           <latest>now</latest>
         </search>
@@ -55,7 +60,7 @@ _DASHBOARD = """\
       <title>TGT requests by pre-auth type (last 24h)</title>
       <chart>
         <search>
-          <query>| tstats count where index={index} EventCode=4768 by PreAuthType</query>
+          <query>index={index} EventCode=4768 | stats count by PreAuthType</query>
           <earliest>-24h</earliest>
           <latest>now</latest>
         </search>
@@ -127,6 +132,11 @@ def render_savedsearches(model: Model, rules: dict[str, str], *, index: str = DE
 
 
 def build_app(model: Model, out_dir: Path, *, index: str = DEFAULT_INDEX) -> Path:
+    if not _INDEX_NAME.match(index):
+        raise ModelError(
+            f"invalid index name {index!r}; a Splunk index is [A-Za-z0-9_-]+ and is "
+            "interpolated into generated searches and dashboard XML"
+        )
     rules = check_rules(model)
     default = out_dir / "default"
     views = default / "data" / "ui" / "views"

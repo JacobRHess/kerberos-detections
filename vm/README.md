@@ -115,12 +115,16 @@ non-admin test account the two replication rights (`DS-Replication-Get-Changes` 
 and the replication GUIDs in `Properties`, under a non-machine `SubjectUserName`. Export and slice
 into the `dcsync-replication-nondc` attack fixture.
 
-The benign fixture is the hard one. A credible benign window must contain **real DC-to-DC
-replication**, which comes from a domain controller's own computer account (`SubjectUserName` ending
-in `$`) — exactly what the rule excludes. That needs a second DC in the lab so genuine replication
-traffic is recorded; a single-DC forest cannot produce it. Until a two-DC capture exists, note in
-the fixture metadata that the benign slice covers only single-DC 4662 noise, not the machine-account
-replication near-miss the rule is designed to ignore.
+The benign fixture is the hard one, for two reasons. First, credible benign traffic must contain
+**real DC-to-DC replication**, which comes from a domain controller's own computer account
+(`SubjectUserName` ending in `$`) — exactly what the rule excludes — and that needs a second DC in
+the lab; a single-DC forest cannot produce it. Second, and sharper, the rule's `!="*$"` exclusion
+lets through any legitimate *user* account with replication rights: an Entra/Azure AD Connect sync
+account (`MSOL_*`), an admin running `repadmin /syncall`, or a delegated service account. A benign
+window that omits those overstates the detection's precision. Until a two-DC capture with a real
+sync account exists, record in the fixture metadata that the benign slice covers only single-DC 4662
+noise, not the machine-account or sync-account near-misses the deployed rule needs an allowlist to
+handle.
 
 ## Benign captures
 

@@ -98,12 +98,17 @@ def coverage_layer(model: Model) -> dict[str, object]:
     disk (so it was actually replayed in CI). Detections that are staged but not
     yet captured do not colour the layer, matching the layer's own claim.
     """
+    # Count only techniques the stage actually plans for, so this layer and the
+    # text summary (which intersects with stage techniques) never disagree.
+    stage_techniques = {s.id: set(s.techniques) for s in model.stages}
     proven: dict[str, list[str]] = {}
     for detection in model.detections:
         if not _fixtures_present(model, detection):
             continue
+        planned = stage_techniques.get(detection.stage, set())
         for technique in detection.attack:
-            proven.setdefault(technique, []).append(detection.id)
+            if technique in planned:
+                proven.setdefault(technique, []).append(detection.id)
     techniques = [
         {
             "techniqueID": technique,

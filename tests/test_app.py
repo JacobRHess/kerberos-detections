@@ -63,6 +63,12 @@ def test_build_app_missing_rule_fails(tmp_path):
         build_app(load_model(root), tmp_path / "out")
 
 
+def test_build_app_rejects_bad_index(tmp_path):
+    root = build_root(tmp_path)
+    with pytest.raises(ModelError, match="invalid index name"):
+        build_app(load_model(root), tmp_path / "out", index="prod windows")
+
+
 def test_app_conf_shape(tmp_path):
     root = build_root(tmp_path, yaml_text=EMPTY_YAML, write_rule=False)
     build_app(load_model(root), tmp_path / "out")

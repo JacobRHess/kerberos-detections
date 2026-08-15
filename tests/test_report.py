@@ -113,6 +113,27 @@ def test_coverage_layer_empty_without_fixtures(tmp_path):
     assert coverage_layer(load_model(root))["techniques"] == []
 
 
+def test_coverage_layer_skips_out_of_stage_technique(tmp_path):
+    # A detection claims a technique its stage does not plan for; the layer must
+    # agree with the text summary and not color it, even with fixtures present.
+    yaml_text = (
+        "version: 1\n\nstages:\n  - id: 01-credential-access\n"
+        "    techniques: [T1558.003]\n\ndetections:\n"
+        f"  - id: {DETECTION_ID}\n"
+        "    title: t\n"
+        f"    rule: rules/{DETECTION_ID}.spl\n"
+        "    stage: 01-credential-access\n"
+        "    attack: [T1003.006]\n"
+        "    fixtures:\n"
+        f"      - events: fixtures/{DETECTION_ID}.attack.json\n"
+        "        expect: attack\n"
+        f"      - events: fixtures/{DETECTION_ID}.benign.json\n"
+        "        expect: benign\n"
+    )
+    root = with_fixtures(build_root(tmp_path, yaml_text=yaml_text))
+    assert coverage_layer(load_model(root))["techniques"] == []
+
+
 def test_coverage_layer_no_detections(tmp_path):
     root = build_root(tmp_path, yaml_text=EMPTY_YAML_TEXT)
     layer = coverage_layer(load_model(root))
