@@ -39,8 +39,9 @@ _COMMON = ("sourcetype", "_time", "Computer", "EventCode")
 # fields the rules actually search; a capture export that lost one of them
 # (audit-policy gap, EVTX truncation) must not reach the fixtures. Kerberos
 # service-ticket requests (4769) are the Kerberoasting signal; authentication-
-# service requests (4768) carry the AS-REP roasting signal (PreAuthType=0). The
-# directory-replication event (4662, DCSync) lands with its detection later.
+# service requests (4768) carry the AS-REP roasting signal (PreAuthType=0);
+# directory-service access (4662) with the replication extended-right GUIDs in
+# Properties is the DCSync signal.
 _REQUIRED: dict[tuple[str, int], tuple[str, ...]] = {
     (SECURITY, 4769): (
         "TargetUserName",
@@ -59,6 +60,14 @@ _REQUIRED: dict[tuple[str, int], tuple[str, ...]] = {
         "PreAuthType",
         "IpAddress",
         "Status",
+    ),
+    (SECURITY, 4662): (
+        "SubjectUserName",
+        "SubjectDomainName",
+        "ObjectServer",
+        "ObjectType",
+        "Properties",
+        "AccessMask",
     ),
 }
 

@@ -67,13 +67,13 @@ def test_event_code_specific_required_fields():
 
 
 def test_unpaired_sourcetype_and_code_needs_only_common_fields():
-    # 4662 has no entry in _REQUIRED, so only the common fields are enforced.
+    # 4672 has no entry in _REQUIRED, so only the common fields are enforced.
     validate_event(
         {
             "sourcetype": SECURITY,
             "_time": "2026-08-14T15:10:00.000000+00:00",
             "Computer": "DC01.range.lab",
-            "EventCode": 4662,
+            "EventCode": 4672,
         },
         "ctx",
     )
@@ -125,6 +125,42 @@ def test_security_4768_required_fields():
 )
 def test_security_4768_missing_required_field_fails(missing):
     event = dict(VALID_4768)
+    del event[missing]
+    with pytest.raises(SchemaError, match=f"missing required field '{missing}'"):
+        validate_event(event, "ctx")
+
+
+VALID_4662 = {
+    "sourcetype": SECURITY,
+    "_time": "2026-08-14T15:12:00.000000+00:00",
+    "Computer": "DC01.range.lab",
+    "EventCode": 4662,
+    "SubjectUserName": "attacker_admin",
+    "SubjectDomainName": "RANGE",
+    "ObjectServer": "DS",
+    "ObjectType": "domainDNS",
+    "Properties": "Control Access {1131f6ad-9c07-11d1-f79f-00c04fc2dcd2}",
+    "AccessMask": "0x100",
+}
+
+
+def test_security_4662_required_fields():
+    validate_event(dict(VALID_4662), "ctx")
+
+
+@pytest.mark.parametrize(
+    "missing",
+    [
+        "SubjectUserName",
+        "SubjectDomainName",
+        "ObjectServer",
+        "ObjectType",
+        "Properties",
+        "AccessMask",
+    ],
+)
+def test_security_4662_missing_required_field_fails(missing):
+    event = dict(VALID_4662)
     del event[missing]
     with pytest.raises(SchemaError, match=f"missing required field '{missing}'"):
         validate_event(event, "ctx")

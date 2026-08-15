@@ -43,3 +43,15 @@ detections:
         expect: attack
       - events: fixtures/asrep-roasting-no-preauth.benign.json
         expect: benign
+  - id: dcsync-replication-nondc
+    title: DCSync via directory-replication access requested by a non-DC principal
+    rule: rules/dcsync-replication-nondc.spl
+    stage: 01-credential-access
+    attack: [T1003.006]
+    slice:
+      security: [4662]
+    fixtures:
+      - events: fixtures/dcsync-replication-nondc.attack.json
+        expect: attack
+      - events: fixtures/dcsync-replication-nondc.benign.json
+        expect: benign

@@ -16,7 +16,7 @@ def run_cli(*argv: str) -> int:
 
 def test_validate_repo(repo_root: Path, capsys):
     assert run_cli("--root", str(repo_root), "validate") == 0
-    assert "2 detections" in capsys.readouterr().out
+    assert "3 detections" in capsys.readouterr().out
 
 
 def test_report_repo(repo_root: Path, capsys):
@@ -24,7 +24,8 @@ def test_report_repo(repo_root: Path, capsys):
     out = capsys.readouterr().out
     assert "kerberoasting-rc4-service-ticket" in out
     assert "asrep-roasting-no-preauth" in out
-    assert "Detections: 2" in out
+    assert "dcsync-replication-nondc" in out
+    assert "Detections: 3" in out
 
 
 def test_report_repo_markdown(repo_root: Path, capsys):
@@ -272,6 +273,24 @@ def test_build_app_requires_out(repo_root, capsys):
 
 def test_report_layer_via_cli(make_root, tmp_path, capsys):
     root = make_root()
+    # The proven-coverage layer only lists techniques whose fixtures exist.
+    event = {
+        "sourcetype": "XmlWinEventLog:Security",
+        "_time": "2026-08-14T15:20:01.000000+00:00",
+        "Computer": "DC01.range.lab",
+        "EventCode": 4769,
+        "TargetUserName": "jdoe@RANGE.LAB",
+        "ServiceName": "svc_sql",
+        "ServiceSid": "S-1-5-21-1-2-3-1102",
+        "TicketOptions": "0x40810000",
+        "TicketEncryptionType": "0x17",
+        "IpAddress": "::ffff:10.10.10.50",
+        "Status": "0x0",
+    }
+    for expect in ("attack", "benign"):
+        (root / f"fixtures/{DETECTION_ID}.{expect}.json").write_text(
+            json.dumps([event]), encoding="utf-8"
+        )
     layer = tmp_path / "layer.json"
     assert run_cli("--root", str(root), "report", "--layer", str(layer)) == 0
     assert str(layer) in capsys.readouterr().out

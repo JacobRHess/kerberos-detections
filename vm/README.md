@@ -106,6 +106,22 @@ equivalent), which writes 4768 with `PreAuthType=0` on DC01. Export the same way
 The benign window for this detection must include normal TGT activity (`PreAuthType=2`) so the
 benign slice exercises the pre-auth filter rather than sidestepping it.
 
+## DCSync variant (T1003.006)
+
+`Install-Telemetry.ps1` already enables the Directory Service Access subcategory (4662). Grant a
+non-admin test account the two replication rights (`DS-Replication-Get-Changes` and
+`-Get-Changes-All`) on the domain object, then from WS01 run a replication request as that account
+(Impacket's `secretsdump.py -just-dc`, or the equivalent). DC01 logs 4662 with `AccessMask=0x100`
+and the replication GUIDs in `Properties`, under a non-machine `SubjectUserName`. Export and slice
+into the `dcsync-replication-nondc` attack fixture.
+
+The benign fixture is the hard one. A credible benign window must contain **real DC-to-DC
+replication**, which comes from a domain controller's own computer account (`SubjectUserName` ending
+in `$`) — exactly what the rule excludes. That needs a second DC in the lab so genuine replication
+traffic is recorded; a single-DC forest cannot produce it. Until a two-DC capture exists, note in
+the fixture metadata that the benign slice covers only single-DC 4662 noise, not the machine-account
+replication near-miss the rule is designed to ignore.
+
 ## Benign captures
 
 Same export path over a scripted normal-usage window, then slice with `--benign`.

@@ -45,7 +45,8 @@ def test_coverage_text_with_detection(tmp_path):
     assert DETECTION_ID in text
     assert "01-credential-access" in text
     assert "T1558.003" in text
-    assert "Techniques proven: 1/1" in text
+    assert "Techniques with a detection: 1/1" in text
+    assert "Replay-ready (both fixtures present): 1/1" in text
     assert "MISSING" not in text
     assert "attack:yes" in text.replace(" ", "")
 
@@ -90,12 +91,12 @@ def test_summary_counts_multiple_stages(tmp_path):
     root = build_root(tmp_path, yaml_text=yaml_text)
     model = load_model(root)
     text = coverage_text(model)
-    assert "Techniques proven: 1/3" in text
+    assert "Techniques with a detection: 1/3" in text
     assert "02-discovery: 0 detection(s)" in text
 
 
 def test_coverage_layer_marks_proven_techniques(tmp_path):
-    root = build_root(tmp_path)
+    root = with_fixtures(build_root(tmp_path))
     layer = coverage_layer(load_model(root))
     assert layer["domain"] == "enterprise-attack"
     techniques = layer["techniques"]
@@ -104,6 +105,12 @@ def test_coverage_layer_marks_proven_techniques(tmp_path):
     assert entry["techniqueID"] == "T1558.003"
     assert entry["score"] == 1
     assert DETECTION_ID in str(entry["comment"])
+
+
+def test_coverage_layer_empty_without_fixtures(tmp_path):
+    # A detection exists but its fixtures are not on disk, so nothing is proven.
+    root = build_root(tmp_path)
+    assert coverage_layer(load_model(root))["techniques"] == []
 
 
 def test_coverage_layer_no_detections(tmp_path):

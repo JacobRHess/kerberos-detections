@@ -19,6 +19,11 @@ def _asset(path: Path, root: Path) -> str:
     return "yes" if (root / path).is_file() else "MISSING"
 
 
+def _fixtures_present(model: Model, detection: Detection) -> bool:
+    """True when both of a detection's fixtures exist on disk (replay-ready)."""
+    return all((model.root / ref.events).is_file() for ref in detection.fixtures)
+
+
 def _row(model: Model, detection: Detection) -> tuple[str, str, str, str, str]:
     fixtures = " + ".join(
         f"{ref.expect}:{_asset(ref.events, model.root)}" for ref in detection.fixtures
@@ -48,8 +53,15 @@ def _summary(model: Model) -> str:
         covered[detection.stage] |= set(detection.attack)
 
     total = sum(len(t) for t in stage_techniques.values())
-    proven = sum(len(c & stage_techniques[sid]) for sid, c in covered.items())
-    lines = [f"Detections: {len(model.detections)}   Techniques proven: {proven}/{total}"]
+    claimed = sum(len(c & stage_techniques[sid]) for sid, c in covered.items())
+    replay_ready = sum(1 for d in model.detections if _fixtures_present(model, d))
+    lines = [
+        f"Detections: {len(model.detections)}   Techniques with a detection: {claimed}/{total}"
+    ]
+    lines.append(
+        f"Replay-ready (both fixtures present): {replay_ready}/{len(model.detections)} "
+        "detection(s); the rest are staged, pending capture"
+    )
     for stage in model.stages:
         n = len(model.stage_detections(stage.id))
         lines.append(f"  {stage.id}: {n} detection(s)")
@@ -80,9 +92,16 @@ def coverage_markdown(model: Model) -> str:
 
 
 def coverage_layer(model: Model) -> dict[str, object]:
-    """ATT&CK Navigator layer: which techniques have a proven detection."""
+    """ATT&CK Navigator layer of *proven* techniques.
+
+    A technique is proven only when a detection claiming it has both fixtures on
+    disk (so it was actually replayed in CI). Detections that are staged but not
+    yet captured do not colour the layer, matching the layer's own claim.
+    """
     proven: dict[str, list[str]] = {}
     for detection in model.detections:
+        if not _fixtures_present(model, detection):
+            continue
         for technique in detection.attack:
             proven.setdefault(technique, []).append(detection.id)
     techniques = [

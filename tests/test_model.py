@@ -20,12 +20,14 @@ def test_repo_detections_yaml_loads(repo_root: Path):
     assert model.version == 1
     assert len(model.stages) == 1
     assert model.stage("01").id == "01-credential-access"
-    assert len(model.detections) == 2
+    assert len(model.detections) == 3
     by_id = {d.id: d for d in model.detections}
     assert by_id["kerberoasting-rc4-service-ticket"].attack == ("T1558.003",)
     assert by_id["kerberoasting-rc4-service-ticket"].stage == "01-credential-access"
     assert by_id["asrep-roasting-no-preauth"].attack == ("T1558.004",)
     assert by_id["asrep-roasting-no-preauth"].slice == {"security": (4768,)}
+    assert by_id["dcsync-replication-nondc"].attack == ("T1003.006",)
+    assert by_id["dcsync-replication-nondc"].slice == {"security": (4662,)}
 
 
 def test_full_model_loads(make_root):

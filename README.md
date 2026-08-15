@@ -52,6 +52,19 @@ EventCode=4768 PreAuthType=0 Status=0x0
 
 Unlike the 4769 rule, this one applies no machine-account or `krbtgt` exclusion and no volume threshold: a successful pre-auth-less TGT request is *already* the anomaly, so a single one deserves a row, whether the account is a user or a misconfigured machine. It catches the request, not the offline crack that may follow, and an attacker who flips `DONT_REQUIRE_PREAUTH` on and off quickly leaves only a thin 4768 trail. Like the Kerberoasting rule, it is unproven until a real capture provides its fixtures.
 
+## The DCSync detection
+
+DCSync impersonates a domain controller to ask a real DC to replicate directory data, which is how an attacker with the right rights pulls password hashes (including `krbtgt`) without touching a DC's disk. The replication request logs as event **4662** (directory-service access) whose `Properties` name the replication extended rights:
+
+```spl
+EventCode=4662 ObjectServer="DS" AccessMask="0x100"
+(Properties="*1131f6aa-...*" OR Properties="*1131f6ad-...*") SubjectUserName!="*$"
+```
+
+The two GUIDs are `DS-Replication-Get-Changes` and `DS-Replication-Get-Changes-All`. The discriminator is `SubjectUserName!="*$"`: legitimate replication is performed by domain controllers under their own **machine** accounts (which end in `$`), so a *non-machine* principal requesting replication is the DCSync signal.
+
+That exclusion is also why DCSync's benign fixture is the hardest one in this project. Proving a low false-positive rate means the benign capture has to contain **real DC-to-DC replication** from a genuine DC computer account, which needs a second DC in the lab (or an honest note that the benign window only covers a single-DC forest). The rule and its tests are committed, but this detection stays deliberately last until that benign capture exists; a detection is only as honest as the benign traffic it was proven against.
+
 ## The CLI
 
 ```powershell
@@ -109,6 +122,8 @@ Two jobs: `gate` (ruff, ruff format, mypy strict, offline pytest at >=90% branch
 |---|---|---|---|
 | Kerberoasting | T1558.003 | 4769 RC4 service-ticket burst | rule + tests in place; real fixtures pending first capture |
 | AS-REP roasting | T1558.004 | 4768 with pre-auth disabled (`PreAuthType=0`) | rule + tests in place; real fixtures pending first capture |
-| DCSync | T1003.006 | 4662 directory-replication access | staged; needs a credible benign fixture of real DC-to-DC replication |
+| DCSync | T1003.006 | 4662 replication access from a non-DC principal | rule + tests in place; benign fixture is the hard one (real DC-to-DC replication) |
 
-The engine, the Kerberoasting rule, the lab scripts, and both CI gates are done and green. The attack and benign **fixtures** come from a real DC capture (see `vm/README.md`); until they land, `report` honestly shows the technique as staged, not proven. DCSync is deliberately last because its benign half (legitimate replication from a domain controller's own computer account) is the hardest capture to get right, and a detection is only as honest as the benign traffic it was proven against.
+"Rule + tests in place" means the analytic, its schema contract, and its engine tests are committed and the offline gate proves them; it does **not** mean the search is validated. `report` says "Techniques with a detection: 3/3" but "Replay-ready: 0/3", and the ATT&CK Navigator layer stays empty until a detection has both real fixtures on disk. A technique only lights up the "proven coverage" layer once it has actually fired on a real capture and stayed silent on a real benign one in CI.
+
+The engine, all three rules, the lab scripts, and both CI gates are done and green. What remains is the honest part that cannot be shortcut: the attack and benign **fixtures** come from real DC captures (see `vm/README.md`), and until they land, every technique above stays "staged, not proven." No fixtures are fabricated to close that gap.
