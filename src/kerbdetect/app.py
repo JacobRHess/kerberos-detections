@@ -10,15 +10,10 @@ CI replays against a real Splunk. Build with ``kerbdetect build-app --out
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 from kerbdetect.model import Detection, Model, ModelError, check_rules
-from kerbdetect.splunk import DEFAULT_INDEX
-
-# A Splunk index name interpolated into generated SPL and dashboard XML. Reject
-# anything that could inject an extra search term or corrupt the XML.
-_INDEX_NAME = re.compile(r"^[A-Za-z0-9_-]+$")
+from kerbdetect.splunk import DEFAULT_INDEX, TOKEN
 
 _APP_CONF = """\
 [install]
@@ -103,16 +98,21 @@ def _enriched_search(index: str, rule_text: str, detection: Detection) -> str:
     )
 
 
-def _saved_search(detection: Detection, search: str) -> str:
+def _saved_search(detection: Detection, search: str, *, enabled: bool) -> str:
     # Collapse whitespace so a newline in a detection title cannot inject a
     # second conf key. Ids are already kebab-case constrained by the loader.
+    # Staged detections (fixtures not yet captured, so unproven) install disabled
+    # rather than firing as live alerts on a rule no replay has validated.
     title = " ".join(detection.title.split())
+    sched = "1" if enabled else "0"
+    disabled = "0" if enabled else "1"
     return (
         f"[kerbdetect - {detection.id}]\n"
         f"search = {search}\n"
         f"description = {title}\n"
         "cron_schedule = */10 * * * *\n"
-        "enableSched = 1\n"
+        f"enableSched = {sched}\n"
+        f"disabled = {disabled}\n"
         "dispatch.earliest_time = -15m\n"
         "dispatch.latest_time = now\n"
         "counttype = number of events\n"
@@ -125,14 +125,18 @@ def _saved_search(detection: Detection, search: str) -> str:
 
 def render_savedsearches(model: Model, rules: dict[str, str], *, index: str = DEFAULT_INDEX) -> str:
     stanzas = [
-        _saved_search(detection, _enriched_search(index, rules[detection.id], detection))
+        _saved_search(
+            detection,
+            _enriched_search(index, rules[detection.id], detection),
+            enabled=model.has_fixtures(detection),
+        )
         for detection in model.detections
     ]
     return "\n".join(stanzas)
 
 
 def build_app(model: Model, out_dir: Path, *, index: str = DEFAULT_INDEX) -> Path:
-    if not _INDEX_NAME.match(index):
+    if not TOKEN.match(index):
         raise ModelError(
             f"invalid index name {index!r}; a Splunk index is [A-Za-z0-9_-]+ and is "
             "interpolated into generated searches and dashboard XML"

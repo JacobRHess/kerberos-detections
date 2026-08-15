@@ -16,8 +16,7 @@ $policies = @(
     @('Kerberos Service Ticket Operations', 'enable', 'enable'),   # 4769, 4770 (Kerberoasting)
     @('Kerberos Authentication Service', 'enable', 'enable'),      # 4768, 4771 (AS-REP roasting)
     @('Logon', 'enable', 'enable'),                                # 4624, 4625 (benign context)
-    @('Directory Service Access', 'enable', 'disable'),            # 4662 (DCSync, later slice)
-    @('Other Logon/Logoff Events', 'enable', 'disable')            # 1102 (Security log cleared)
+    @('Directory Service Access', 'enable', 'disable')             # 4662 (DCSync)
 )
 foreach ($p in $policies) {
     # Quote each name:value argument: unquoted "/subcategory:$p[0]" is passed

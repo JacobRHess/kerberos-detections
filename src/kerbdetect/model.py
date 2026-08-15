@@ -305,8 +305,11 @@ def check_rule(rule_path: Path) -> str:
 
     if text.count('"') % 2 != 0:
         raise ModelError(f"{rule_path}: unbalanced quotes")
+    # Count brackets on the string-stripped text so a literal paren inside a
+    # quoted value (e.g. Properties="*foo)*") is not mistaken for unbalanced SPL.
+    outside_strings = _strip_strings(text)
     for ch_open, ch_close in (("(", ")"), ("[", "]")):
-        if text.count(ch_open) != text.count(ch_close):
+        if outside_strings.count(ch_open) != outside_strings.count(ch_close):
             raise ModelError(f"{rule_path}: unbalanced {ch_open}{ch_close} pairs")
 
     if stripped.startswith("|"):

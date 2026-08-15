@@ -24,7 +24,7 @@ from typing import Any
 
 from kerbdetect import schema
 from kerbdetect.model import EXPECT_ATTACK, EXPECT_BENIGN, Detection, Model, ModelError, check_rules
-from kerbdetect.splunk import SplunkClient
+from kerbdetect.splunk import TOKEN, SplunkClient
 
 _TIME_PAD = timedelta(seconds=60)
 
@@ -103,9 +103,11 @@ def run_replay(
     if not ready:
         return []
     rules = check_rules(model)
-    client.bootstrap()
     if run_id is None:
         run_id = uuid.uuid4().hex[:12]
+    elif not TOKEN.match(run_id):
+        raise ReplayError(f"invalid run id {run_id!r}; use [A-Za-z0-9_-]+ (it is scoped into SPL)")
+    client.bootstrap()
     return [
         replay_detection(client, model, detection, rules[detection.id], run_id)
         for detection in ready

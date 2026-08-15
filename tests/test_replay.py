@@ -92,6 +92,11 @@ def test_run_replay_all_pass(loaded_model):
     assert f"run1-{DETECTION_ID}-benign" in tags
 
 
+def test_run_replay_rejects_bad_run_id(loaded_model):
+    with pytest.raises(ReplayError, match="invalid run id"):
+        run_replay(loaded_model, FakeClient(), run_id='bad"id')
+
+
 def test_run_replay_generates_run_id(loaded_model):
     client = FakeClient()
     run_replay(loaded_model, client)

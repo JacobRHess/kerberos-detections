@@ -351,3 +351,8 @@ def test_rest_non_json():
 def test_index_property():
     client, _ = make_client([])
     assert client.index == "kerbdetect"
+
+
+def test_client_rejects_bad_index():
+    with pytest.raises(SplunkError, match="invalid index name"):
+        SplunkClient(SplunkConfig(index="prod windows"))

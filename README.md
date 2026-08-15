@@ -32,15 +32,16 @@ The rule (`rules/kerberoasting-rc4-service-ticket.spl`) keys on the canonical do
 
 ```spl
 EventCode=4769 Status=0x0 TicketEncryptionType=0x17 ServiceName!="*$" ServiceName!="krbtgt"
-| stats dc(ServiceName) as spn_count values(ServiceName) as service_names ... by TargetUserName IpAddress
+| bin _time span=15m
+| stats dc(ServiceName) as spn_count values(ServiceName) as service_names ... by _time TargetUserName IpAddress
 | where spn_count >= 5
 ```
 
 - `TicketEncryptionType=0x17` is RC4-HMAC, the encryption a roasting tool asks for because RC4 hashes crack fastest.
 - Machine accounts (`ServiceName` ending in `$`) and `krbtgt` are excluded; roasting targets *user* accounts with SPNs.
-- Aggregating by the requesting principal and alerting on many distinct SPNs at once separates a roast from a user legitimately using one or two services.
+- `bin _time span=15m` makes "many distinct SPNs" a *windowed* count that matches the deployed saved search's 15-minute schedule — so replay proves the same burst shape production would fire on, not a total collapsed over the whole capture. (Without it, a fixture spanning days would count SPNs that never co-occur in a real 15-minute window.)
 
-**What it does not catch, honestly.** This is a downgrade-plus-volume heuristic, and it has a documented tier of blind spots. In an AES-only domain the attacker gets `0x12`/`0x11` tickets and the RC4 clause misses; the harder, noisier follow-on is a pure volume/entropy rule on distinct-SPN bursts regardless of cipher. The `>= 5` threshold is a starting point to tune against the real benign capture, not a universal constant, and the expected near-miss is a legitimate login script that touches several service-backed apps at once. A patient attacker who requests one ticket for one high-value SPN, or drips a few requests a day, stays under any burst threshold; that single-high-value case belongs in its own rule with its own fixture pair, not bolted onto this one. The rule is the cheap, high-signal first layer, and the README says so rather than implying full coverage.
+**What it does not catch, honestly.** This is a downgrade-plus-volume heuristic, and it has a documented tier of blind spots. In an AES-only domain the attacker gets `0x12`/`0x11` tickets and the RC4 clause misses; the harder, noisier follow-on is a pure volume/entropy rule on distinct-SPN bursts regardless of cipher. The `>= 5` threshold is a starting point to tune against a real benign capture, not a universal constant, and the expected near-miss is a legitimate login script that touches several service-backed apps at once. It also groups by the *requesting* principal without excluding machine accounts — the real attack fixture's requester is itself a machine account, so that exclusion would drop proven coverage — which means a busy legacy account that still negotiates RC4 for many services can alert; a deployment allowlist of known-noisy principals is the fix, exactly as for the DCSync sync-account case. A patient attacker who requests one ticket for one high-value SPN, or drips a few requests a day, stays under any burst threshold; that single-high-value case belongs in its own rule with its own fixture pair. The rule is the cheap, high-signal first layer, and the README says so rather than implying full coverage.
 
 ## The AS-REP roasting detection
 
@@ -95,7 +96,7 @@ Rules are plain SPL searching the production field names, and the replay harness
 
 ## Deploying the detections
 
-`kerbdetect build-app` renders the same rule files CI replays into an installable Splunk app: one scheduled saved search per detection, scoped to the deployment index and enriched with its ATT&CK technique and stage, plus a coverage dashboard. Drop the output directory in `$SPLUNK_HOME/etc/apps/`. The CI validate job installs the generated app into the container on every push and asserts every detection landed as a saved search, so what deploys is what was proven.
+`kerbdetect build-app` renders the same rule files CI replays into an installable Splunk app: one scheduled saved search per detection, scoped to the deployment index and enriched with its ATT&CK technique and stage, plus a coverage dashboard. Drop the output directory in `$SPLUNK_HOME/etc/apps/`. **Proven detections install enabled; staged ones (fixtures not yet captured, so unproven) install `disabled = 1`** — they ship for review but do not fire as live alerts on a rule no replay has validated. The CI validate job installs the app and asserts every detection landed as a saved search.
 
 ## The data
 

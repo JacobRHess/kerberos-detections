@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -41,6 +42,10 @@ ENV_INDEX = "KD_SPLUNK_INDEX"
 ENV_VERIFY = "KD_SPLUNK_VERIFY"
 
 _TRUTHY = frozenset({"1", "true", "yes", "on"})
+
+# An index name (and the run tag) is interpolated straight into SPL and generated
+# config; restrict it so it cannot inject an extra search term or break a quote.
+TOKEN = re.compile(r"^[A-Za-z0-9_-]+$")
 
 _HEC_BATCH = 500
 
@@ -123,6 +128,11 @@ def _error_text(body: str) -> str:
 
 class SplunkClient:
     def __init__(self, config: SplunkConfig, *, timeout: float = 30.0) -> None:
+        if not TOKEN.match(config.index):
+            raise SplunkError(
+                f"invalid index name {config.index!r}; a Splunk index is [A-Za-z0-9_-]+ and is "
+                "interpolated into search strings"
+            )
         self.config = config
         self._timeout = timeout
         self._session = requests.Session()

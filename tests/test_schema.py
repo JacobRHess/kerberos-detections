@@ -166,6 +166,24 @@ def test_security_4662_missing_required_field_fails(missing):
         validate_event(event, "ctx")
 
 
+@pytest.mark.parametrize(
+    ("field", "bad"),
+    [
+        ("Status", "0"),  # decimal instead of hex 0x0
+        ("TicketEncryptionType", "23"),  # decimal instead of 0x17
+        ("AccessMask", "256"),  # decimal instead of 0x100
+        ("PreAuthType", "0x0"),  # hex instead of a decimal
+    ],
+)
+def test_field_format_enforced(field, bad):
+    with pytest.raises(SchemaError, match="does not match the format"):
+        validate_event(make_event(**{field: bad}), "ctx")
+
+
+def test_field_format_accepts_real_values():
+    validate_event(make_event(AccessMask="0x100", PreAuthType="2"), "ctx")
+
+
 def test_validate_events_empty_fails():
     with pytest.raises(SchemaError, match="no events"):
         validate_events([], "ctx")

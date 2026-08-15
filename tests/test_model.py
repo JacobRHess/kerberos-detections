@@ -243,6 +243,14 @@ def test_check_rule_contract(make_root):
     assert check_rule(rule_path).startswith("EventCode=4769")
 
 
+def test_check_rule_allows_paren_inside_string(make_root):
+    # A literal paren inside a quoted value must not count as unbalanced SPL.
+    root = make_root()
+    rule_path = root / "rules" / f"{DETECTION_ID}.spl"
+    rule_path.write_text('EventCode=4662 Properties="*foo)bar*"', encoding="utf-8")
+    assert check_rule(rule_path).startswith("EventCode=4662")
+
+
 def test_check_rules_aggregates(make_root):
     root = make_root(rule="| stats count")
     with pytest.raises(ModelError, match="pipeline"):

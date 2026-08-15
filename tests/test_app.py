@@ -27,6 +27,25 @@ def test_build_app_renders_saved_search(tmp_path):
     assert "cron_schedule = */10 * * * *" in conf
 
 
+def test_saved_search_disabled_when_staged(tmp_path):
+    # No fixtures on disk -> staged -> installs disabled, not a live alert.
+    root = build_root(tmp_path)
+    build_app(load_model(root), tmp_path / "out")
+    conf = (tmp_path / "out" / "default" / "savedsearches.conf").read_text(encoding="utf-8")
+    assert "disabled = 1" in conf
+    assert "enableSched = 0" in conf
+
+
+def test_saved_search_enabled_when_proven(tmp_path):
+    root = build_root(tmp_path)
+    for expect in ("attack", "benign"):
+        (root / f"fixtures/{DETECTION_ID}.{expect}.json").write_text("[]", encoding="utf-8")
+    build_app(load_model(root), tmp_path / "out")
+    conf = (tmp_path / "out" / "default" / "savedsearches.conf").read_text(encoding="utf-8")
+    assert "disabled = 0" in conf
+    assert "enableSched = 1" in conf
+
+
 def test_build_app_index_override(tmp_path):
     root = build_root(tmp_path)
     model = load_model(root)

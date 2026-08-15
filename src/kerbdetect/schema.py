@@ -21,6 +21,7 @@ say - fails loudly instead of silently never matching a rule.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any
 
@@ -72,6 +73,22 @@ _REQUIRED: dict[tuple[str, int], tuple[str, ...]] = {
 }
 
 
+# The rules compare these fields against literal values (Status=0x0,
+# TicketEncryptionType=0x17, PreAuthType=0, AccessMask=0x100). Presence alone is
+# not enough: a fixture carrying Status "0" instead of "0x0" would pass a
+# presence check but make the rule silently never match, which is exactly the
+# "benign passes for the wrong reason" failure this schema exists to catch. When
+# one of these fields is present, its value must have the shape the rule expects.
+_HEX = re.compile(r"^0x[0-9a-fA-F]+$")
+_DEC = re.compile(r"^\d+$")
+_FIELD_FORMATS: dict[str, re.Pattern[str]] = {
+    "Status": _HEX,
+    "TicketEncryptionType": _HEX,
+    "AccessMask": _HEX,
+    "PreAuthType": _DEC,
+}
+
+
 class SchemaError(ValueError):
     """A fixture event does not conform to the kerbdetect schema."""
 
@@ -105,6 +122,14 @@ def validate_event(event: dict[str, Any], ctx: str) -> None:
         if field not in event:
             raise SchemaError(
                 f"{ctx}: {sourcetype} event {event_code} is missing required field {field!r}"
+            )
+
+    for field, pattern in _FIELD_FORMATS.items():
+        value = event.get(field)
+        if isinstance(value, str) and not pattern.match(value):
+            raise SchemaError(
+                f"{ctx}: field {field!r} has value {value!r}, which does not match the "
+                f"format the rules compare against ({pattern.pattern})"
             )
 
 
