@@ -15,7 +15,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from kerbdetect.model import load_model
-from kerbdetect.replay import format_outcome, run_replay
+from kerbdetect.replay import format_outcome, replay_committed_fixtures, run_replay
 from kerbdetect.schema import SECURITY
 from kerbdetect.splunk import SplunkClient, config_from_env
 
@@ -63,3 +63,22 @@ def test_live_replay_ready_detections(repo_root) -> None:
     outcomes = run_replay(model, _client())
     failures = [format_outcome(outcome) for outcome in outcomes if not outcome.passed]
     assert not failures, "\n".join(failures)
+
+
+def test_live_committed_fixtures_behave(repo_root) -> None:
+    # Every committed fixture is a real capture, including the half of a not-yet-ready
+    # pair. Each must behave: attack fires, benign stays silent. This proves the
+    # committed kerberoast attack and AS-REP benign halves in CI, not just DCSync.
+    model = load_model(repo_root)
+    present = [
+        ref for d in model.detections for ref in d.fixtures if (model.root / ref.events).is_file()
+    ]
+    if not present:
+        pytest.skip("no committed fixtures yet")
+    outcomes = replay_committed_fixtures(model, _client())
+    failures = [
+        f"{o.path} [{o.expect}]: {o.rows} row(s) from {o.events} event(s)"
+        for o in outcomes
+        if not o.passed
+    ]
+    assert not failures, "committed fixtures misbehaved:\n" + "\n".join(failures)

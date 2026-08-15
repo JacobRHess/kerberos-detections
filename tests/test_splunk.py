@@ -356,3 +356,8 @@ def test_index_property():
 def test_client_rejects_bad_index():
     with pytest.raises(SplunkError, match="invalid index name"):
         SplunkClient(SplunkConfig(index="prod windows"))
+
+
+def test_client_rejects_reserved_index():
+    with pytest.raises(SplunkError, match="invalid index name"):
+        SplunkClient(SplunkConfig(index="_internal"))

@@ -94,6 +94,22 @@ def test_validate_corrupt_fixture_fails(make_root, capsys):
     assert "not valid JSON" in capsys.readouterr().err
 
 
+def test_validate_rejects_out_of_slice_fixture(make_root, capsys):
+    # DEFAULT_YAML slices security:[4769]; a benign 4624 passes schema but is mis-sliced.
+    root = make_root()
+    event = {
+        "sourcetype": "XmlWinEventLog:Security",
+        "_time": "2026-08-14T15:20:01.000000+00:00",
+        "Computer": "DC01",
+        "EventCode": 4624,
+    }
+    (root / f"fixtures/{DETECTION_ID}.benign.json").write_text(
+        json.dumps([event]), encoding="utf-8"
+    )
+    assert run_cli("--root", str(root), "validate") == 1
+    assert "outside the detection's slice spec" in capsys.readouterr().err
+
+
 def test_validate_fixture_with_schema_violation_fails(make_root, capsys):
     root = make_root()
     fixture = root / f"fixtures/{DETECTION_ID}.attack.json"

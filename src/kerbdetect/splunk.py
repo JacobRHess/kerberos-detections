@@ -43,9 +43,12 @@ ENV_VERIFY = "KD_SPLUNK_VERIFY"
 
 _TRUTHY = frozenset({"1", "true", "yes", "on"})
 
-# An index name (and the run tag) is interpolated straight into SPL and generated
-# config; restrict it so it cannot inject an extra search term or break a quote.
+# The run tag is interpolated straight into SPL; restrict it so it cannot inject an
+# extra search term or break a quote.
 TOKEN = re.compile(r"^[A-Za-z0-9_-]+$")
+# An index name is the same, but must not start with "_": those are Splunk's
+# reserved internal indexes (_internal, _audit, ...), not a deployment target.
+INDEX_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 
 _HEC_BATCH = 500
 
@@ -128,10 +131,10 @@ def _error_text(body: str) -> str:
 
 class SplunkClient:
     def __init__(self, config: SplunkConfig, *, timeout: float = 30.0) -> None:
-        if not TOKEN.match(config.index):
+        if not INDEX_NAME.match(config.index):
             raise SplunkError(
-                f"invalid index name {config.index!r}; a Splunk index is [A-Za-z0-9_-]+ and is "
-                "interpolated into search strings"
+                f"invalid index name {config.index!r}; a deployment index is [A-Za-z0-9_-]+ "
+                "not starting with '_' (reserved), and is interpolated into search strings"
             )
         self.config = config
         self._timeout = timeout

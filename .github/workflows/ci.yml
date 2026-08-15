@@ -35,19 +35,6 @@ jobs:
         run: uv run pip-audit --skip-editable
       - name: Tests with coverage gate
         run: uv run pytest -q --cov
-      - name: Generate kill-chain coverage artifacts
-        run: |
-          uv run kerbdetect report --markdown > coverage.md
-          uv run kerbdetect report --layer layer.json
-      - name: Upload coverage artifacts
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: kerbdetect-coverage
-          path: |
-            coverage.md
-            layer.json
-          if-no-files-found: ignore
 
   # Live-Splunk gate: boots Splunk 9.4 in Docker and runs the replay-marked
   # tests against it. The client bootstraps index, props and HEC token over
@@ -111,3 +98,18 @@ jobs:
           )
           assert apps and apps[0]["count"] == "1", "the generated app did not load"
           PY
+      # Generated here, after replay passed, so a "proven coverage" layer is only
+      # produced when the detections it marks actually fired/stayed-silent in CI.
+      - name: Generate coverage artifacts
+        run: |
+          uv run kerbdetect report --markdown > coverage.md
+          uv run kerbdetect report --layer layer.json
+      - name: Upload coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: kerbdetect-coverage
+          path: |
+            coverage.md
+            layer.json
+          if-no-files-found: ignore

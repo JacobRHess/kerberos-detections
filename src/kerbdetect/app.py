@@ -13,7 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from kerbdetect.model import Detection, Model, ModelError, check_rules
-from kerbdetect.splunk import DEFAULT_INDEX, TOKEN
+from kerbdetect.splunk import DEFAULT_INDEX, INDEX_NAME
 
 _APP_CONF = """\
 [install]
@@ -136,7 +136,7 @@ def render_savedsearches(model: Model, rules: dict[str, str], *, index: str = DE
 
 
 def build_app(model: Model, out_dir: Path, *, index: str = DEFAULT_INDEX) -> Path:
-    if not TOKEN.match(index):
+    if not INDEX_NAME.match(index):
         raise ModelError(
             f"invalid index name {index!r}; a Splunk index is [A-Za-z0-9_-]+ and is "
             "interpolated into generated searches and dashboard XML"

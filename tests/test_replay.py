@@ -12,6 +12,7 @@ from kerbdetect.replay import (
     check_model_for_replay,
     format_outcome,
     load_fixture,
+    replay_committed_fixtures,
     replay_detection,
     run_replay,
 )
@@ -95,6 +96,19 @@ def test_run_replay_all_pass(loaded_model):
 def test_run_replay_rejects_bad_run_id(loaded_model):
     with pytest.raises(ReplayError, match="invalid run id"):
         run_replay(loaded_model, FakeClient(), run_id='bad"id')
+
+
+def test_replay_committed_fixtures_checks_each(loaded_model):
+    client = FakeClient(attack_rows=2, benign_rows=0)
+    outcomes = replay_committed_fixtures(loaded_model, client)
+    assert client.bootstrap_called
+    assert {o.expect for o in outcomes} == {"attack", "benign"}
+    assert all(o.passed for o in outcomes)
+
+
+def test_replay_committed_fixtures_rejects_bad_run_id(loaded_model):
+    with pytest.raises(ReplayError, match="invalid run id"):
+        replay_committed_fixtures(loaded_model, FakeClient(), run_id='bad"id')
 
 
 def test_run_replay_generates_run_id(loaded_model):

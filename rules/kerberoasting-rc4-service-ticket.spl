@@ -1,4 +1,5 @@
 EventCode=4769 Status=0x0 TicketEncryptionType=0x17 ServiceName!="*$" ServiceName!="krbtgt"
-| bin _time span=15m
-| stats dc(ServiceName) as spn_count values(ServiceName) as service_names min(_time) as first_seen max(_time) as last_seen by _time TargetUserName IpAddress
+| sort 0 _time
+| streamstats time_window=15m dc(ServiceName) as spn_count values(ServiceName) as service_names min(_time) as window_start max(_time) as window_end by TargetUserName IpAddress
 | where spn_count >= 5
+| dedup TargetUserName IpAddress

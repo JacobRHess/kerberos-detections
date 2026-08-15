@@ -20,6 +20,7 @@ import dataclasses
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 from kerbdetect import app as app_mod
 from kerbdetect import capture as capture_mod
@@ -30,6 +31,7 @@ from kerbdetect.model import (
     EXPECT_ATTACK,
     EXPECT_BENIGN,
     SOURCES,
+    Detection,
     Model,
     ModelError,
     check_rules,
@@ -101,6 +103,24 @@ def _command_capture(model: Model, args: argparse.Namespace) -> int:
     return 0
 
 
+def _slice_mismatches(
+    detection: Detection, rel_path: Path, events: list[dict[str, Any]]
+) -> list[str]:
+    """Flag fixture events whose (sourcetype, EventCode) falls outside the slice spec.
+
+    A mis-sliced fixture (e.g. a benign 4624 landing in a 4769-only detection) passes
+    schema validation but proves the wrong thing at replay; catch it at validate time.
+    """
+    if not detection.slice:
+        return []
+    kept = capture_mod.slice_events(events, detection.slice)
+    if len(kept) == len(events):
+        return []
+    inside = {(e["sourcetype"], e["EventCode"]) for e in kept}
+    outside = sorted({(e["sourcetype"], e["EventCode"]) for e in events} - inside)
+    return [f"{rel_path}: events {outside} are outside the detection's slice spec"]
+
+
 def _command_validate(model: Model) -> int:
     problems: list[str] = []
     try:
@@ -129,6 +149,8 @@ def _command_validate(model: Model) -> int:
                 schema.validate_events(raw, str(ref.events))
             except schema.SchemaError as exc:
                 problems.append(f"{ref.events}: {exc}")
+                continue
+            problems.extend(_slice_mismatches(detection, ref.events, raw))
 
     if not model.detections:
         print("no detections yet; stages load clean")
