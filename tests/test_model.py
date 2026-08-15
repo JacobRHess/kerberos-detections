@@ -20,11 +20,12 @@ def test_repo_detections_yaml_loads(repo_root: Path):
     assert model.version == 1
     assert len(model.stages) == 1
     assert model.stage("01").id == "01-credential-access"
-    assert len(model.detections) == 1
-    (detection,) = model.detections
-    assert detection.id == "kerberoasting-rc4-service-ticket"
-    assert detection.stage == "01-credential-access"
-    assert detection.attack == ("T1558.003",)
+    assert len(model.detections) == 2
+    by_id = {d.id: d for d in model.detections}
+    assert by_id["kerberoasting-rc4-service-ticket"].attack == ("T1558.003",)
+    assert by_id["kerberoasting-rc4-service-ticket"].stage == "01-credential-access"
+    assert by_id["asrep-roasting-no-preauth"].attack == ("T1558.004",)
+    assert by_id["asrep-roasting-no-preauth"].slice == {"security": (4768,)}
 
 
 def test_full_model_loads(make_root):
@@ -209,6 +210,22 @@ def test_check_rule_contract(make_root):
     rule_path.write_text('EventCode=4769 ServiceName="unbalanced', encoding="utf-8")
     with pytest.raises(ModelError, match="unbalanced"):
         check_rule(rule_path)
+
+    rule_path.write_text("EventCode=4769 | stats count", encoding="utf-8")
+    with pytest.raises(ModelError, match="aggregating rule must end"):
+        check_rule(rule_path)
+
+    # A non-aggregating rule needs no count guard.
+    rule_path.write_text("EventCode=4768 PreAuthType=0 Status=0x0", encoding="utf-8")
+    assert check_rule(rule_path).startswith("EventCode=4768")
+
+    # A grouped stats ending in a positive-count guard is accepted.
+    rule_path.write_text(
+        "EventCode=4769 TicketEncryptionType=0x17 "
+        "| stats dc(ServiceName) as spn_count by TargetUserName | where spn_count >= 5",
+        encoding="utf-8",
+    )
+    assert check_rule(rule_path).startswith("EventCode=4769")
 
     rule_path.write_text("   \n", encoding="utf-8")
     with pytest.raises(ModelError, match="empty"):

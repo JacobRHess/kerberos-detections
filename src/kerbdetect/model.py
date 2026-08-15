@@ -42,7 +42,12 @@ SOURCES = (SOURCE_SECURITY,)
 _STAGE_ID = re.compile(r"^\d{2}-[a-z0-9]+(-[a-z0-9]+)*$")
 _DETECTION_ID = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 _TECHNIQUE_ID = re.compile(r"^T\d{4}(\.\d{3})?$")
-_SLICE_CODE = re.compile(r"^\d{1,5}$")
+
+# An aggregating command collapses events into summary rows; Splunk emits one
+# all-zero row even when nothing matched, so an aggregating rule must end with a
+# positive-count guard or the benign fixture would always "fire".
+_AGGREGATING = re.compile(r"\|\s*(?:stats|tstats|chart|timechart)\b", re.IGNORECASE)
+_ENDS_WITH_COUNT_GUARD = re.compile(r"\|\s*where\s+\w+\s*(?:>=|>)\s*\d+\s*$", re.IGNORECASE)
 
 # Commands that must never open a rule: the harness prepends bare search
 # terms, and these forms do not combine with a bare-term prefix.
@@ -314,6 +319,13 @@ def check_rule(rule_path: Path) -> str:
         raise ModelError(
             f"{rule_path}: rule must not bind {match.group(1)!r}; "
             "index and time binding belong to the deployment, not the rule"
+        )
+
+    if _AGGREGATING.search(scanned) and not _ENDS_WITH_COUNT_GUARD.search(scanned):
+        raise ModelError(
+            f"{rule_path}: aggregating rule must end with '| where <count> > 0' "
+            "(or a stricter threshold); Splunk emits one all-zero row on zero matches, "
+            "so the benign fixture would otherwise fire"
         )
     return stripped
 

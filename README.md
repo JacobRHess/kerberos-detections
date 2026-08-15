@@ -40,7 +40,17 @@ EventCode=4769 Status=0x0 TicketEncryptionType=0x17 ServiceName!="*$" ServiceNam
 - Machine accounts (`ServiceName` ending in `$`) and `krbtgt` are excluded; roasting targets *user* accounts with SPNs.
 - Aggregating by the requesting principal and alerting on many distinct SPNs at once separates a roast from a user legitimately using one or two services.
 
-**What it does not catch, honestly.** This is a downgrade-plus-volume heuristic, and it has a documented tier of blind spots. In an AES-only domain the attacker gets `0x12`/`0x11` tickets and the RC4 clause misses; the harder, noisier follow-on is a pure volume/entropy rule on distinct-SPN bursts regardless of cipher. The `>= 5` threshold is a starting point that gets tuned against the real benign capture, not a universal constant. And a patient attacker who requests a few tickets a day stays under any burst threshold. The rule is the cheap, high-signal first layer, and the README says so rather than implying full coverage.
+**What it does not catch, honestly.** This is a downgrade-plus-volume heuristic, and it has a documented tier of blind spots. In an AES-only domain the attacker gets `0x12`/`0x11` tickets and the RC4 clause misses; the harder, noisier follow-on is a pure volume/entropy rule on distinct-SPN bursts regardless of cipher. The `>= 5` threshold is a starting point to tune against the real benign capture, not a universal constant, and the expected near-miss is a legitimate login script that touches several service-backed apps at once. A patient attacker who requests one ticket for one high-value SPN, or drips a few requests a day, stays under any burst threshold; that single-high-value case belongs in its own rule with its own fixture pair, not bolted onto this one. The rule is the cheap, high-signal first layer, and the README says so rather than implying full coverage.
+
+## The AS-REP roasting detection
+
+AS-REP roasting is the pre-authentication cousin of Kerberoasting. If an account has `DONT_REQUIRE_PREAUTH` set, anyone can request a TGT for it and receive a response encrypted with the account's password hash, with no credentials of their own. The domain controller logs the request as event **4768** with `PreAuthType=0`. The rule (`rules/asrep-roasting-no-preauth.spl`) is deliberately simple:
+
+```spl
+EventCode=4768 PreAuthType=0 Status=0x0
+```
+
+Unlike the 4769 rule, this one applies no machine-account or `krbtgt` exclusion and no volume threshold: a successful pre-auth-less TGT request is *already* the anomaly, so a single one deserves a row, whether the account is a user or a misconfigured machine. It catches the request, not the offline crack that may follow, and an attacker who flips `DONT_REQUIRE_PREAUTH` on and off quickly leaves only a thin 4768 trail. Like the Kerberoasting rule, it is unproven until a real capture provides its fixtures.
 
 ## The CLI
 
@@ -98,7 +108,7 @@ Two jobs: `gate` (ruff, ruff format, mypy strict, offline pytest at >=90% branch
 | Technique | ATT&CK | Signal | Status |
 |---|---|---|---|
 | Kerberoasting | T1558.003 | 4769 RC4 service-ticket burst | rule + tests in place; real fixtures pending first capture |
-| AS-REP roasting | T1558.004 | 4768 with pre-auth disabled | staged in detections.yaml |
+| AS-REP roasting | T1558.004 | 4768 with pre-auth disabled (`PreAuthType=0`) | rule + tests in place; real fixtures pending first capture |
 | DCSync | T1003.006 | 4662 directory-replication access | staged; needs a credible benign fixture of real DC-to-DC replication |
 
 The engine, the Kerberoasting rule, the lab scripts, and both CI gates are done and green. The attack and benign **fixtures** come from a real DC capture (see `vm/README.md`); until they land, `report` honestly shows the technique as staged, not proven. DCSync is deliberately last because its benign half (legitimate replication from a domain controller's own computer account) is the hardest capture to get right, and a detection is only as honest as the benign traffic it was proven against.

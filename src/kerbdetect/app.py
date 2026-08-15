@@ -41,10 +41,21 @@ _DASHBOARD = """\
   <description>kerbdetect detections and what they have caught recently.</description>
   <row>
     <panel>
-      <title>Kerberos ticket encryption types (last 24h)</title>
+      <title>Kerberos service-ticket encryption types (last 24h)</title>
       <chart>
         <search>
           <query>| tstats count where index={index} EventCode=4769 by TicketEncryptionType</query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">pie</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>TGT requests by pre-auth type (last 24h)</title>
+      <chart>
+        <search>
+          <query>| tstats count where index={index} EventCode=4768 by PreAuthType</query>
           <earliest>-24h</earliest>
           <latest>now</latest>
         </search>

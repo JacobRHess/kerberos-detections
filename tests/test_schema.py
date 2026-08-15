@@ -67,16 +67,21 @@ def test_event_code_specific_required_fields():
 
 
 def test_unpaired_sourcetype_and_code_needs_only_common_fields():
-    # 4768 has no entry in _REQUIRED, so only the common fields are enforced.
+    # 4662 has no entry in _REQUIRED, so only the common fields are enforced.
     validate_event(
         {
             "sourcetype": SECURITY,
             "_time": "2026-08-14T15:10:00.000000+00:00",
             "Computer": "DC01.range.lab",
-            "EventCode": 4768,
+            "EventCode": 4662,
         },
         "ctx",
     )
+
+
+def test_naive_time_fails():
+    with pytest.raises(SchemaError, match="timezone-aware"):
+        validate_event(make_event(_time="2026-08-14T15:20:01"), "ctx")
 
 
 def test_security_4769_required_fields():
@@ -84,6 +89,44 @@ def test_security_4769_required_fields():
     event = make_event()
     del event["ServiceName"]
     with pytest.raises(SchemaError, match="missing required field 'ServiceName'"):
+        validate_event(event, "ctx")
+
+
+VALID_4768 = {
+    "sourcetype": SECURITY,
+    "_time": "2026-08-14T15:10:00.000000+00:00",
+    "Computer": "DC01.range.lab",
+    "EventCode": 4768,
+    "TargetUserName": "old_svc",
+    "ServiceName": "krbtgt",
+    "TicketOptions": "0x40810010",
+    "TicketEncryptionType": "0x17",
+    "PreAuthType": "0",
+    "IpAddress": "::ffff:10.10.10.50",
+    "Status": "0x0",
+}
+
+
+def test_security_4768_required_fields():
+    validate_event(dict(VALID_4768), "ctx")
+
+
+@pytest.mark.parametrize(
+    "missing",
+    [
+        "TargetUserName",
+        "ServiceName",
+        "TicketOptions",
+        "TicketEncryptionType",
+        "PreAuthType",
+        "IpAddress",
+        "Status",
+    ],
+)
+def test_security_4768_missing_required_field_fails(missing):
+    event = dict(VALID_4768)
+    del event[missing]
+    with pytest.raises(SchemaError, match=f"missing required field '{missing}'"):
         validate_event(event, "ctx")
 
 

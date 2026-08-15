@@ -91,6 +91,21 @@ into the attack fixture:
 uv run kerbdetect capture captures/stage-01-*.kerbdetect.xml --stage 01-credential-access
 ```
 
+## AS-REP roasting variant (T1558.004)
+
+Same lab, same channel, no telemetry change (`Install-Telemetry.ps1` already enables the Kerberos
+Authentication Service subcategory that writes 4768). On DC01, flag one account as pre-auth-exempt:
+
+```powershell
+Set-ADAccountControl -Identity svc_report -DoesNotRequirePreAuth $true
+```
+
+From WS01, request TGTs for pre-auth-disabled accounts (Impacket's `GetNPUsers.py` or the
+equivalent), which writes 4768 with `PreAuthType=0` on DC01. Export the same way
+(`.\Export-Stage.ps1 -Stage 01`) and slice into the `asrep-roasting-no-preauth` attack fixture.
+The benign window for this detection must include normal TGT activity (`PreAuthType=2`) so the
+benign slice exercises the pre-auth filter rather than sidestepping it.
+
 ## Benign captures
 
 Same export path over a scripted normal-usage window, then slice with `--benign`.

@@ -77,6 +77,12 @@ def run_capture(
     events.sort(key=lambda e: e["_time"])
 
     if expect == EXPECT_ATTACK:
+        stages_seen = {captured.stage for captured, _ in parsed}
+        if len(stages_seen) > 1:
+            raise SliceError(
+                f"attack exports declare mixed stages {sorted(stages_seen)}; "
+                "slice one stage per capture invocation"
+            )
         attrs = parsed[0][0]
         detected_stage = _resolve_capture_stage(model, attrs)
         chosen = model.stage(stage_ref) if stage_ref is not None else detected_stage

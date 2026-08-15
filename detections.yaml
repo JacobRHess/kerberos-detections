@@ -31,3 +31,15 @@ detections:
         expect: attack
       - events: fixtures/kerberoasting-rc4-service-ticket.benign.json
         expect: benign
+  - id: asrep-roasting-no-preauth
+    title: AS-REP roasting via a Kerberos TGT request with pre-authentication disabled
+    rule: rules/asrep-roasting-no-preauth.spl
+    stage: 01-credential-access
+    attack: [T1558.004]
+    slice:
+      security: [4768]
+    fixtures:
+      - events: fixtures/asrep-roasting-no-preauth.attack.json
+        expect: attack
+      - events: fixtures/asrep-roasting-no-preauth.benign.json
+        expect: benign

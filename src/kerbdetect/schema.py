@@ -38,9 +38,9 @@ _COMMON = ("sourcetype", "_time", "Computer", "EventCode")
 # Additional fields each (sourcetype, EventCode) pair must carry. These are the
 # fields the rules actually search; a capture export that lost one of them
 # (audit-policy gap, EVTX truncation) must not reach the fixtures. Kerberos
-# service-ticket requests (4769) are the Kerberoasting signal; 4768 (auth
-# service / AS-REP) and 4662 (directory replication / DCSync) land with their
-# detections in later slices.
+# service-ticket requests (4769) are the Kerberoasting signal; authentication-
+# service requests (4768) carry the AS-REP roasting signal (PreAuthType=0). The
+# directory-replication event (4662, DCSync) lands with its detection later.
 _REQUIRED: dict[tuple[str, int], tuple[str, ...]] = {
     (SECURITY, 4769): (
         "TargetUserName",
@@ -48,6 +48,15 @@ _REQUIRED: dict[tuple[str, int], tuple[str, ...]] = {
         "ServiceSid",
         "TicketOptions",
         "TicketEncryptionType",
+        "IpAddress",
+        "Status",
+    ),
+    (SECURITY, 4768): (
+        "TargetUserName",
+        "ServiceName",
+        "TicketOptions",
+        "TicketEncryptionType",
+        "PreAuthType",
         "IpAddress",
         "Status",
     ),
@@ -75,9 +84,13 @@ def validate_event(event: dict[str, Any], ctx: str) -> None:
     if not isinstance(timestamp, str):
         raise SchemaError(f"{ctx}: _time must be an ISO-8601 string")
     try:
-        datetime.fromisoformat(timestamp)
+        parsed_time = datetime.fromisoformat(timestamp)
     except ValueError as exc:
         raise SchemaError(f"{ctx}: _time does not parse as ISO-8601: {timestamp!r}") from exc
+    # A naive timestamp would be read in the host's local zone at HEC ingest
+    # (datetime.timestamp()), shifting the event off the captured timeline.
+    if parsed_time.tzinfo is None:
+        raise SchemaError(f"{ctx}: _time must be timezone-aware (UTC), got {timestamp!r}")
 
     for field in _REQUIRED.get((sourcetype, event_code), ()):
         if field not in event:

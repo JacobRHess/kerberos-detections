@@ -20,6 +20,28 @@ NO_SLICE_YAML = DEFAULT_YAML.replace("    slice:\n      security: [4769]\n", "")
 
 EMPTY_SLICE_YAML = DEFAULT_YAML.replace("      security: [4769]", "      security: [9999]")
 
+ASREP_YAML = """\
+version: 1
+
+stages:
+  - id: 01-credential-access
+    techniques: [T1558.004]
+
+detections:
+  - id: asrep-roasting-no-preauth
+    title: AS-REP roasting via a TGT request with pre-auth disabled
+    rule: rules/asrep-roasting-no-preauth.spl
+    stage: 01-credential-access
+    attack: [T1558.004]
+    slice:
+      security: [4768]
+    fixtures:
+      - events: fixtures/asrep-roasting-no-preauth.attack.json
+        expect: attack
+      - events: fixtures/asrep-roasting-no-preauth.benign.json
+        expect: benign
+"""
+
 
 def test_slice_events_filters_by_channel_and_code():
     events = [
@@ -49,6 +71,19 @@ def test_attack_capture_slices_fixtures(make_root, sample_capture):
     assert [e["EventCode"] for e in events] == [4769, 4769, 4769]
     times = [e["_time"] for e in events]
     assert times == sorted(times)
+    schema.validate_events(events, "attack")
+
+
+def test_attack_capture_slices_4768(tmp_path, sample_capture):
+    root = build_root(tmp_path, yaml_text=ASREP_YAML)
+    model = load_model(root)
+    (outcome,) = run_capture(root, model, [sample_capture], expect="attack")
+    assert outcome.detection_id == "asrep-roasting-no-preauth"
+    assert outcome.events == 1
+    events = json.loads(
+        (root / "fixtures/asrep-roasting-no-preauth.attack.json").read_text(encoding="utf-8")
+    )
+    assert events[0]["EventCode"] == 4768
     schema.validate_events(events, "attack")
 
 
@@ -89,6 +124,18 @@ def test_attack_capture_unknown_stage_attr(make_root, sample_capture, tmp_path):
     )
     with pytest.raises(SliceError, match="does not define"):
         run_capture(root, model, [other], expect="attack")
+
+
+def test_attack_capture_mixed_stages_fails(make_root, sample_capture, tmp_path):
+    root = make_root()
+    model = load_model(root)
+    other = tmp_path / "stage02.xml"
+    other.write_text(
+        sample_capture.read_text(encoding="utf-8").replace('stage="01"', 'stage="02"', 1),
+        encoding="utf-8",
+    )
+    with pytest.raises(SliceError, match="mixed stages"):
+        run_capture(root, model, [sample_capture, other], expect="attack")
 
 
 def test_empty_slice_fails_loudly(make_root, sample_capture):
