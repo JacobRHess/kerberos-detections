@@ -21,7 +21,7 @@ def _asset(path: Path, root: Path) -> str:
 
 def _fixtures_present(model: Model, detection: Detection) -> bool:
     """True when both of a detection's fixtures exist on disk (replay-ready)."""
-    return all((model.root / ref.events).is_file() for ref in detection.fixtures)
+    return model.has_fixtures(detection)
 
 
 def _row(model: Model, detection: Detection) -> tuple[str, str, str, str, str]:

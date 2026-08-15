@@ -184,10 +184,21 @@ def test_load_fixture_ok(tmp_path):
     assert len(load_fixture(tmp_path, Path("good.json"))) == 1
 
 
-def test_check_model_for_replay_missing_fixture(tmp_path):
+def test_check_model_for_replay_skips_staged(tmp_path):
+    # A detection with no fixtures is staged, not an error; it is skipped.
     root = build_root(tmp_path)
     model = load_model(root)
-    with pytest.raises(ReplayError, match="missing fixture"):
+    assert model.replay_ready() == ()
+    check_model_for_replay(model)  # does not raise
+
+
+def test_check_model_for_replay_bad_fixture_when_ready(tmp_path):
+    # A detection that HAS both fixtures but ships a broken one still fails loudly.
+    root = build_root(tmp_path)
+    write_fixtures(root)
+    (root / "fixtures" / f"{DETECTION_ID}.attack.json").write_text("{oops", encoding="utf-8")
+    model = load_model(root)
+    with pytest.raises(ReplayError, match="not valid JSON"):
         check_model_for_replay(model)
 
 

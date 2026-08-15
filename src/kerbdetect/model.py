@@ -117,6 +117,14 @@ class Model:
     def stage_detections(self, stage_id: str) -> tuple[Detection, ...]:
         return tuple(d for d in self.detections if d.stage == stage_id)
 
+    def has_fixtures(self, detection: Detection) -> bool:
+        """True when both of a detection's fixtures exist on disk."""
+        return all((self.root / ref.events).is_file() for ref in detection.fixtures)
+
+    def replay_ready(self) -> tuple[Detection, ...]:
+        """Detections with both fixtures captured; the rest are staged, pending capture."""
+        return tuple(d for d in self.detections if self.has_fixtures(d))
+
 
 def load_model(root: Path) -> Model:
     path = root / "detections.yaml"

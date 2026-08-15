@@ -24,8 +24,9 @@ on a private/internal switch, no route to the host or internet during captures:
   Install-ADDSForest -DomainName range.lab -DomainNetbiosName RANGE -InstallDns -Force
   ```
 
-  The DC name lands in every fixture's `Computer` field; this project's fixtures
-  use `DC01.range.lab`.
+  The DC name lands in every fixture's `Computer` field. (The fixtures committed
+  to this repo come from published datasets instead — see `../fixtures/SOURCES.md`
+  — so they carry the Splunk Attack Range's hostnames, not this runbook's.)
 
 - **WS01** - Windows 10/11 eval, domain-joined to `range.lab`, the attacker vantage.
 

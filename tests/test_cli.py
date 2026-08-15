@@ -109,13 +109,16 @@ def test_replay_no_detections(tmp_path, capsys):
         "    techniques: [T1558.003]\n\ndetections: []\n",
     )
     assert run_cli("--root", str(root), "replay") == 0
-    assert "no detections to replay" in capsys.readouterr().out
+    assert "no replay-ready detections" in capsys.readouterr().out
 
 
-def test_replay_missing_fixture_fails_without_network(make_root, capsys):
+def test_replay_staged_detection_skipped(make_root, capsys):
+    # A detection with no fixtures is staged, not an error: skipped, exit 0.
     root = make_root()
-    assert run_cli("--root", str(root), "replay") == 1
-    assert "missing fixture" in capsys.readouterr().err
+    assert run_cli("--root", str(root), "replay") == 0
+    out = capsys.readouterr().out
+    assert "staged" in out
+    assert "no replay-ready detections" in out
 
 
 def test_new_scaffolds_detection(make_root, capsys):

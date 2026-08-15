@@ -56,10 +56,10 @@ def test_live_bootstrap_ingest_search() -> None:
     )
 
 
-def test_live_replay_all_detections(repo_root) -> None:
+def test_live_replay_ready_detections(repo_root) -> None:
     model = load_model(repo_root)
-    if not model.detections:
-        pytest.skip("no detections committed yet; replay becomes real with the first capture")
+    if not model.replay_ready():
+        pytest.skip("no replay-ready detections yet; replay becomes real with the first capture")
     outcomes = run_replay(model, _client())
     failures = [format_outcome(outcome) for outcome in outcomes if not outcome.passed]
     assert not failures, "\n".join(failures)

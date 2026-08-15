@@ -5,9 +5,9 @@
 
 **Active Directory / Kerberos attacks captured on real domain-controller telemetry, and the Splunk detections that prove themselves against it.**
 
-This is a detection-engineering lab built the honest way I like: no synthetic events and no untested rules. An attack runs against a real Hyper-V Active Directory forest, the domain controller's own Security log records it, that capture is sliced into fixtures that keep the production field names, and every detection has to fire on the captured attack and stay silent on a captured benign window, replayed through a live Splunk container in CI on every push.
+This is a detection-engineering lab built the honest way I like: no synthetic events and no untested rules. Each detection is proven by replaying **real captured Windows Security-log telemetry** through a live Splunk container in CI — it has to fire on a real attack capture and stay silent on a real benign one. The committed fixtures come from published attack-simulation data (Splunk's [`attack_data`](https://github.com/splunk/attack_data), recorded in the Splunk Attack Range); their exact provenance is in [`fixtures/SOURCES.md`](fixtures/SOURCES.md), and `vm/README.md` is the runbook for capturing your own from a lab you control.
 
-It starts with one technique done end to end rather than a wide shallow sweep. The first is **Kerberoasting** (T1558.003). AS-REP roasting (T1558.004) and DCSync (T1003.006) are staged in `detections.yaml` and land the same way as captures are recorded.
+It covers three Kerberos techniques: **Kerberoasting** (T1558.003), **AS-REP roasting** (T1558.004), and **DCSync** (T1003.006). Each is only counted as *proven* once it has both fixture halves replaying green; where real public data supplied only one half, the other is left openly pending rather than fabricated (see the coverage table).
 
 ## The contract
 
@@ -97,9 +97,9 @@ Rules are plain SPL searching the production field names, and the replay harness
 
 `kerbdetect build-app` renders the same rule files CI replays into an installable Splunk app: one scheduled saved search per detection, scoped to the deployment index and enriched with its ATT&CK technique and stage, plus a coverage dashboard. Drop the output directory in `$SPLUNK_HOME/etc/apps/`. The CI validate job installs the generated app into the container on every push and asserts every detection landed as a saved search, so what deploys is what was proven.
 
-## The lab
+## The data
 
-Two Gen-2 Hyper-V VMs on an isolated switch: a domain controller (`DC01.range.lab`) as the telemetry source, and a domain-joined workstation as the attacker vantage. `vm/Install-Telemetry.ps1` turns on the Kerberos audit subcategories (4769/4770 service tickets, 4768/4771 authentication, plus logon and directory-access for later slices); `vm/Export-Stage.ps1` exports the Security-log window as raw EVTX XML. The full runbook, including seeding SPN service accounts and running the roast, is in [`vm/README.md`](vm/README.md).
+The committed fixtures are real captured telemetry from published attack simulations (Splunk's `attack_data`); [`fixtures/SOURCES.md`](fixtures/SOURCES.md) lists each fixture's exact upstream dataset and what it contains. To capture your own instead, `vm/` has the lab runbook: two Gen-2 Hyper-V VMs on an isolated switch — a domain controller as the telemetry source and a domain-joined workstation as the attacker vantage. `vm/Install-Telemetry.ps1` turns on the Kerberos audit subcategories (4769/4770 service tickets, 4768/4771 authentication, directory-access for DCSync); `vm/Export-Stage.ps1` exports the Security-log window as raw EVTX XML. The full runbook, including seeding SPN service accounts, is in [`vm/README.md`](vm/README.md).
 
 Fixtures carry the raw EVTX element names (`ServiceName`, `TicketEncryptionType`, `TargetUserName`) because the export serializes each event with `.ToXml()`. The one ingest assumption behind "runs unmodified in production" is `renderXml = true` on the Security input (sourcetype `XmlWinEventLog:Security`); `vm/README.md` spells out why.
 
@@ -120,10 +120,8 @@ Two jobs: `gate` (ruff, ruff format, mypy strict, offline pytest at >=90% branch
 
 | Technique | ATT&CK | Signal | Status |
 |---|---|---|---|
-| Kerberoasting | T1558.003 | 4769 RC4 service-ticket burst | rule + tests in place; real fixtures pending first capture |
-| AS-REP roasting | T1558.004 | 4768 with pre-auth disabled (`PreAuthType=0`) | rule + tests in place; real fixtures pending first capture |
-| DCSync | T1003.006 | 4662 replication access from a non-DC principal | rule + tests in place; benign fixture is the hard one (real DC-to-DC replication) |
+| DCSync | T1003.006 | 4662 replication access from a non-DC principal | **Proven.** Real attack + real benign both replay green (fires on `Administrator` replication, silent on `DC$` machine-account replication). |
+| Kerberoasting | T1558.003 | 4769 RC4 service-ticket burst | Real **attack** half proven (fires on a real 159-ticket RC4 burst). Benign half pending: needs real *normal* 4769 traffic, absent from public attack datasets. |
+| AS-REP roasting | T1558.004 | 4768 with pre-auth disabled (`PreAuthType=0`) | Real **benign** half proven (silent on real normal TGTs). Attack half pending: needs a real 4768 `PreAuthType=0`, absent from public datasets. |
 
-"Rule + tests in place" means the analytic, its schema contract, and its engine tests are committed and the offline gate proves them; it does **not** mean the search is validated. `report` says "Techniques with a detection: 3/3" but "Replay-ready: 0/3", and the ATT&CK Navigator layer stays empty until a detection has both real fixtures on disk. A technique only lights up the "proven coverage" layer once it has actually fired on a real capture and stayed silent on a real benign one in CI.
-
-The engine, all three rules, the lab scripts, and both CI gates are done and green. What remains is the honest part that cannot be shortcut: the attack and benign **fixtures** come from real DC captures (see `vm/README.md`), and until they land, every technique above stays "staged, not proven." No fixtures are fabricated to close that gap.
+Replay is lifecycle-aware. A detection is **proven** only when both fixture halves are on disk and replay green; a detection missing a half is **staged** — its rule and schema are committed and the offline gate proves them, but `replay` skips it (loudly) and the ATT&CK Navigator "proven coverage" layer leaves it uncoloured. `report` shows this directly: "Techniques with a detection: 3/3" but "Replay-ready: 1/3". This is the honest state — one technique fully proven on real data, two with one real half each and the other openly pending. Nothing is fabricated to fill the gap; drop the missing halves in (from your own capture or another real dataset) and those detections turn green too.

@@ -149,8 +149,12 @@ def _command_replay(model: Model, args: argparse.Namespace) -> int:
         "index": args.index,
     }
     config = dataclasses.replace(base, **{k: v for k, v in overrides.items() if v is not None})
-    if not model.detections:
-        print("no detections to replay yet; fixtures land as captures are recorded")
+    ready = model.replay_ready()
+    staged = [d for d in model.detections if d not in ready]
+    for detection in staged:
+        print(f"staged {detection.id}: fixtures pending capture, skipped")
+    if not ready:
+        print("no replay-ready detections yet; fixtures land as captures are recorded")
         return 0
     check_model_for_replay(model)
     client = SplunkClient(config)
@@ -160,7 +164,7 @@ def _command_replay(model: Model, args: argparse.Namespace) -> int:
     failed = [outcome for outcome in outcomes if not outcome.passed]
     if failed:
         raise CommandError(f"{len(failed)}/{len(outcomes)} detection(s) failed replay")
-    print(f"all {len(outcomes)} detection(s) passed replay")
+    print(f"all {len(outcomes)} replay-ready detection(s) passed ({len(staged)} staged)")
     return 0
 
 

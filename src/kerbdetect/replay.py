@@ -99,7 +99,8 @@ def replay_detection(
 def run_replay(
     model: Model, client: SplunkClient, *, run_id: str | None = None
 ) -> list[DetectionOutcome]:
-    if not model.detections:
+    ready = model.replay_ready()
+    if not ready:
         return []
     rules = check_rules(model)
     client.bootstrap()
@@ -107,7 +108,7 @@ def run_replay(
         run_id = uuid.uuid4().hex[:12]
     return [
         replay_detection(client, model, detection, rules[detection.id], run_id)
-        for detection in model.detections
+        for detection in ready
     ]
 
 
@@ -120,8 +121,13 @@ def format_outcome(outcome: DetectionOutcome) -> str:
 
 
 def load_replay_targets(model: Model) -> None:
-    """Fail fast if any fixture referenced by a detection is unreadable."""
-    for detection in model.detections:
+    """Fail fast if a replay-ready detection's fixture is unreadable.
+
+    Staged detections (missing one or both fixtures) are skipped by run_replay,
+    so they are not loaded here; a detection that *has* both fixtures but ships a
+    broken one still fails loudly.
+    """
+    for detection in model.replay_ready():
         for ref in detection.fixtures:
             load_fixture(model.root, ref.events)
 
