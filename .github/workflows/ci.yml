@@ -1,0 +1,113 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - run: uv sync --extra dev --frozen
+      - name: Lint
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run ruff check .
+          uv run ruff format --check .
+      - name: Type-check
+        run: uv run mypy
+      - name: Security scan (source)
+        run: uv run bandit -c pyproject.toml -q -r src
+      - name: Vulnerable dependency scan
+        run: uv run pip-audit --skip-editable
+      - name: Tests with coverage gate
+        run: uv run pytest -q --cov
+      - name: Generate kill-chain coverage artifacts
+        run: |
+          uv run kerbdetect report --markdown > coverage.md
+          uv run kerbdetect report --layer layer.json
+      - name: Upload coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: kerbdetect-coverage
+          path: |
+            coverage.md
+            layer.json
+          if-no-files-found: ignore
+
+  # Live-Splunk gate: boots Splunk 9.4 in Docker and runs the replay-marked
+  # tests against it. The client bootstraps index, props and HEC token over
+  # REST, so no conf mounts are needed here. Boots via a step (not a service
+  # container) and polls the image's own healthcheck, the proven pattern from
+  # purpleloop: a custom curl health-cmd never passed on splunk/splunk:9.4.
+  validate:
+    runs-on: ubuntu-latest
+    needs: gate
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - run: uv sync --extra dev --frozen
+      - name: Build the Splunk app from the detections
+        run: uv run kerbdetect build-app --out "$PWD/build/kerbdetect_app"
+      - name: Start Splunk
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name splunk \
+            -p 8088:8088 -p 8089:8089 \
+            -e SPLUNK_START_ARGS=--accept-license \
+            -e SPLUNK_PASSWORD=kerbdetect_dev_2026 \
+            -v "$PWD/build/kerbdetect_app:/opt/splunk/etc/apps/kerbdetect_app" \
+            splunk/splunk:9.4.2@sha256:4f798b8dfa75512c5b69b4f162c686e7b194e980559dd40fed78aadc417381be
+      - name: Wait for Splunk
+        shell: bash
+        run: |
+          # Poll the image's own healthcheck rather than curling from the host: it knows
+          # the configured creds and confirms splunkd is actually serving.
+          for i in $(seq 1 84); do
+            status="$(docker inspect --format '{{.State.Health.Status}}' splunk 2>/dev/null || echo starting)"
+            echo "splunk health: $status ($((i * 5))s)"
+            if [ "$status" = "healthy" ]; then exit 0; fi
+            sleep 5
+          done
+          echo "::error::Splunk did not become healthy in time"
+          docker logs splunk 2>&1 | tail -n 150
+          exit 1
+      - name: Replay-marked tests against live Splunk
+        run: uv run pytest -m replay -v
+      - name: Verify the generated Splunk app installed
+        run: |
+          uv run python - <<'PY'
+          from kerbdetect.model import load_model
+          from kerbdetect.splunk import SplunkClient, config_from_env
+          from pathlib import Path
+
+          client = SplunkClient(config_from_env())
+          rows = client.oneshot_search(
+              '| rest /services/saved/searches | search title="kerbdetect - *" | stats count'
+          )
+          installed = int(rows[0]["count"]) if rows else 0
+          expected = len(load_model(Path.cwd()).detections)
+          print(f"kerbdetect saved searches installed: {installed} (expected {expected})")
+          assert installed == expected, "detections did not install as saved searches"
+          apps = client.oneshot_search(
+              '| rest /services/apps/local | search title=kerbdetect_app | stats count'
+          )
+          assert apps and apps[0]["count"] == "1", "the generated app did not load"
+          PY

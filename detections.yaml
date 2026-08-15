@@ -1,0 +1,33 @@
+# Single source of truth. The replay engine, the test suite and the coverage
+# report are all generated from or checked against this file. Adding a
+# detection means adding an entry here plus one rules/<id>.spl and two fixtures
+# sliced from real domain-controller captures (fixtures/<id>.attack.json,
+# fixtures/<id>.benign.json) - nothing else.
+#
+# Fields are the production Windows Security-log field names: rules written here
+# run unmodified in a Splunk deployment ingesting a domain controller's Security
+# channel with renderXml=true.
+#
+# Coverage is honest. The credential-access stage lists the three Kerberos
+# techniques this lab targets; only the ones with a proven fire/silent fixture
+# pair below actually count as covered. Kerberoasting ships first; AS-REP
+# roasting (4768) and DCSync (4662) land with later captures.
+version: 1
+
+stages:
+  - id: 01-credential-access
+    techniques: [T1558.003, T1558.004, T1003.006]
+
+detections:
+  - id: kerberoasting-rc4-service-ticket
+    title: Kerberoasting via a burst of RC4-downgraded Kerberos service-ticket requests
+    rule: rules/kerberoasting-rc4-service-ticket.spl
+    stage: 01-credential-access
+    attack: [T1558.003]
+    slice:
+      security: [4769]
+    fixtures:
+      - events: fixtures/kerberoasting-rc4-service-ticket.attack.json
+        expect: attack
+      - events: fixtures/kerberoasting-rc4-service-ticket.benign.json
+        expect: benign
